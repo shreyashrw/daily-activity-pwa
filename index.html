@@ -1,0 +1,115 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon-192.png" />
+  <title>Daily Activity App</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    select, button { margin: 10px 0; padding: 8px; font-size: 16px; }
+    #activity { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Daily Activity</h1>
+  <div id="setup">
+    <label>Characteristic:</label><br />
+    <select id="charSelect"></select><br />
+    <label>Level:</label><br />
+    <select id="levelSelect">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select><br />
+    <button onclick="initPlan()">Start</button>
+  </div>
+  <div id="activity" style="display:none;"></div>
+  <button id="resetBtn" onclick="resetApp()" style="display:none;">Reset</button>
+
+  <script>
+    const API_BASE = 'https://script.google.com/macros/s/PASTE_YOUR_DEPLOYED_URL_HERE/exec';
+    const LOCAL_KEY = "userActivityPlan";
+
+    async function fetchDropdownValues() {
+      const url = API_BASE + '?characteristic=ALL&level=ALL';
+      const res = await fetch(url);
+      const data = await res.json();
+      const characteristics = [...new Set(data.map(row => row.characteristic))].sort();
+
+      const charSelect = document.getElementById("charSelect");
+      characteristics.forEach(char => {
+        const option = document.createElement("option");
+        option.value = char;
+        option.textContent = char;
+        charSelect.appendChild(option);
+      });
+    }
+
+    async function fetchData(characteristic, level) {
+      const url = `${API_BASE}?characteristic=${encodeURIComponent(characteristic)}&level=${encodeURIComponent(level)}`;
+      const res = await fetch(url);
+      return await res.json();
+    }
+
+    function getDayIndex() {
+      const start = localStorage.getItem(LOCAL_KEY + '_start');
+      if (!start) return 0;
+      const diff = Math.floor((new Date() - new Date(start)) / (1000 * 60 * 60 * 24));
+      return diff;
+    }
+
+    function showActivity(row) {
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('resetBtn').style.display = 'inline';
+      const output = document.getElementById('activity');
+      output.style.display = 'block';
+      output.innerHTML = `
+        <strong>Today's Activity:</strong><br><br>
+        <b>${row.task}</b><br><br>
+        <i>Why: ${row.why}</i><br>
+        <small>(Task ID: ${row.id})</small>
+      `;
+    }
+
+    async function setupPlan(char, level) {
+      const filtered = await fetchData(char, level);
+      if (filtered.length === 0) {
+        alert("No matching activities found.");
+        return;
+      }
+      const todayIndex = getDayIndex();
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(filtered));
+      localStorage.setItem(LOCAL_KEY + '_start', new Date().toISOString());
+      showActivity(filtered[todayIndex]);
+    }
+
+    function resetApp() {
+      localStorage.removeItem(LOCAL_KEY);
+      localStorage.removeItem(LOCAL_KEY + '_start');
+      location.reload();
+    }
+
+    function initPlan() {
+      const char = document.getElementById("charSelect").value;
+      const level = document.getElementById("levelSelect").value;
+      setupPlan(char, level);
+    }
+
+    window.onload = () => {
+      const stored = localStorage.getItem(LOCAL_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        const index = getDayIndex();
+        if (index < data.length) showActivity(data[index]);
+        else resetApp();
+      } else {
+        fetchDropdownValues();
+      }
+    };
+  </script>
+</body>
+</html>
